@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by data-theme on <html> (set before paint in index.html),
+   so it is deterministic and works with a manual toggle. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Semantic tokens -> Tailwind color utilities (bg-canvas, text-fg, border-border, ...).
+   Values point at the CSS variables below, which swap per theme. */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco,
+    "Cascadia Code", monospace;
+}
+
+/* ---- Light (default) ---- */
+:root {
+  --canvas: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #fbfbfc;
+  --sidebar: #f7f7f8;
+  --border: #e7e7ea;
+  --border-strong: #d6d6db;
+  --fg: #1b1b1f;
+  --muted: #57575f; /* AA on canvas (~6:1) */
+  --subtle: #6c6c75; /* AA on canvas (~4.7:1) */
+  --accent: #1668dc;
+  --accent-hover: #1257bf;
+  --accent-fg: #ffffff;
+  --accent-text: #1257bf;
+  --accent-soft: #e8f0fd;
+  --danger: #d42a1f;
+  --danger-hover: #b42318;
+  --danger-fg: #ffffff;
+  --danger-soft: #fdeeec;
+  --ring: rgb(22 104 220 / 0.35);
+  --shadow-color: 220 20% 40%;
+  color-scheme: light;
+}
+
+/* ---- Dark ---- */
+[data-theme="dark"] {
+  --canvas: #0d0d0f;
+  --surface: #161619;
+  --surface-2: #1d1d21;
+  --sidebar: #121214;
+  --border: #27272c;
+  --border-strong: #3a3a41;
+  --fg: #ececf0;
+  --muted: #a1a1ac; /* AA on dark surfaces (~6:1) */
+  --subtle: #83838d; /* AA on dark surfaces (~4.6:1) */
+  --accent: #1963d6;
+  --accent-hover: #2f74e6;
+  --accent-fg: #ffffff;
+  --accent-text: #6ba6f5;
+  --accent-soft: rgb(63 140 235 / 0.15);
+  --danger: #d13c33;
+  --danger-hover: #e0473d;
+  --danger-fg: #ffffff;
+  --danger-soft: rgb(209 60 51 / 0.15);
+  --ring: rgb(75 157 245 / 0.45);
+  --shadow-color: 240 30% 2%;
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background-color: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Desktop app: no rubber-band overscroll or accidental text selection on chrome. */
+    overscroll-behavior: none;
+    user-select: none;
+    cursor: default;
+  }
+  input,
+  textarea {
+    user-select: text;
+  }
+  /* Disable programming ligatures in code so CLI flags like `--env` render as
+     two hyphens, not an em-dash. Many mono fonts ligate `--`, `->`, `=>`. */
+  code,
+  pre,
+  kbd,
+  samp {
+    font-feature-settings: "liga" 0, "calt" 0;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Thin, theme-aware scrollbars (desktop feel) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--subtle);
+  }
+}
+
+@layer utilities {
+  .elevated {
+    box-shadow:
+      0 1px 2px hsl(var(--shadow-color) / 0.06),
+      0 8px 24px hsl(var(--shadow-color) / 0.12);
+  }
+  .animate-overlay-in {
+    animation: overlay-in 0.16s ease-out;
+  }
+  .animate-content-in {
+    animation: content-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .animate-row-in {
+    animation: row-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-drawer-in {
+    animation: drawer-in 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes content-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Slide the detail drawer in from the right edge. Resting state is
+   transform-free so text/borders stay pixel-snapped in WKWebView. */
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
