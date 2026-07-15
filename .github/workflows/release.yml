@@ -68,10 +68,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="${TAG#v}"
-          APP_PATH=$(ls artifacts/macos-artifacts/*.app.tar.gz)
+          APP_PATH=$(find artifacts/macos-artifacts -type f -name "*.app.tar.gz" | head -1)
+          SIG_PATH=$(find artifacts/macos-artifacts -type f -name "*.app.tar.gz.sig" | head -1)
+          if [ -z "$APP_PATH" ] || [ -z "$SIG_PATH" ]; then
+            echo "Updater artifacts missing. Listing artifacts:"
+            ls -R artifacts/macos-artifacts
+            exit 1
+          fi
           APP_NAME=$(basename "$APP_PATH")
-          SIG=$(cat artifacts/macos-artifacts/*.app.tar.gz.sig)
-          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APP_NAME}"
+          APP_NAME_ENC=$(printf '%s' "$APP_NAME" | sed 's/ /%20/g')
+          SIG=$(cat "$SIG_PATH")
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APP_NAME_ENC}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           jq -n \
             --arg version "$VERSION" \
