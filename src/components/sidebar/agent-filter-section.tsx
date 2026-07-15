@@ -23,48 +23,49 @@ export function AgentFilterSection() {
   const { toggleAgent, clearAgents } = useFilterActions();
   const { agentCounts } = useSidebarCounts();
 
+  const visibleAgents = installedAgents
+    ? AGENTS.filter((a) => installedAgents[a.id] === true)
+    : AGENTS;
+
   return (
     <section>
       <SectionLabel aside={agentFilter.size ? undefined : "filter"}>
         Agents
       </SectionLabel>
       <ul className="space-y-0.5">
-        {agentsLoading
-          ? AGENTS.map((agent) => <AgentSkeletonRow key={agent.id} />)
-          : AGENTS.map((agent) => {
-              const checked = agentFilter.has(agent.id);
-              const installed = installedAgents?.[agent.id] ?? true;
-              return (
-                <li key={agent.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleAgent(agent.id)}
-                    aria-pressed={checked}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-100",
-                      checked ? "bg-surface-2" : "hover:bg-surface-2",
-                      !installed && "opacity-55",
-                    )}
-                  >
-                    <CheckTick checked={checked} />
-                    <AgentBadge id={agent.id} size={20} />
-                    <span className="flex flex-1 items-center gap-1.5 text-left">
-                      <span className="text-[13px] font-medium text-fg">
-                        {agent.label}
-                      </span>
-                      {!installed && (
-                        <span className="text-[11px] text-subtle">
-                          · not installed
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[12px] tabular-nums text-subtle">
-                      {agentCounts[agent.id] ?? 0}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+        {agentsLoading || !installedAgents ? (
+          AGENTS.map((agent) => <AgentSkeletonRow key={agent.id} />)
+        ) : visibleAgents.length === 0 ? (
+          <li className="px-2 py-1.5 text-[12px] leading-snug text-subtle">
+            No agents detected on this machine.
+          </li>
+        ) : (
+          visibleAgents.map((agent) => {
+            const checked = agentFilter.has(agent.id);
+            return (
+              <li key={agent.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleAgent(agent.id)}
+                  aria-pressed={checked}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-100",
+                    checked ? "bg-surface-2" : "hover:bg-surface-2",
+                  )}
+                >
+                  <CheckTick checked={checked} />
+                  <AgentBadge id={agent.id} size={20} />
+                  <span className="flex-1 text-left text-[13px] font-medium text-fg">
+                    {agent.label}
+                  </span>
+                  <span className="text-[12px] tabular-nums text-subtle">
+                    {agentCounts[agent.id] ?? 0}
+                  </span>
+                </button>
+              </li>
+            );
+          })
+        )}
       </ul>
       {agentFilter.size > 0 && (
         <button

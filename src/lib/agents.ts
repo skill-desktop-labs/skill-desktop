@@ -3,6 +3,8 @@ import claudeIcon from "../assets/agents/claude.svg";
 import codexIcon from "../assets/agents/codex.png";
 import geminiIcon from "../assets/agents/gemini.png";
 import cursorIcon from "../assets/agents/cursor.svg";
+import copilotIcon from "../assets/agents/copilot.svg";
+import windsurfIcon from "../assets/agents/windsurf.svg";
 
 export interface AgentMeta {
   id: AgentId;
@@ -37,6 +39,18 @@ export const AGENTS: AgentMeta[] = [
     label: "Cursor",
     icon: cursorIcon,
     dir: ".cursor/skills",
+  },
+  {
+    id: "github-copilot",
+    label: "GitHub Copilot",
+    icon: copilotIcon,
+    dir: ".copilot/skills",
+  },
+  {
+    id: "windsurf",
+    label: "Windsurf",
+    icon: windsurfIcon,
+    dir: ".windsurf/skills",
   },
 ];
 

@@ -1,4 +1,10 @@
-export type AgentId = "claude" | "codex" | "gemini" | "cursor";
+export type AgentId =
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "cursor"
+  | "github-copilot"
+  | "windsurf";
 
 export type SourceType = "git";
 

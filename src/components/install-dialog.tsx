@@ -8,10 +8,9 @@ import {
   LinkSimple,
   Copy,
   CircleNotch,
-  ArrowLeft,
   WarningCircle,
 } from "@phosphor-icons/react";
-import type { AgentId, InstallMethod, Scope } from "../lib/types";
+import type { AgentId, InstalledAgents, InstallMethod, Scope } from "../lib/types";
 import { AGENTS } from "../lib/agents";
 import { Modal } from "./ui/dialog";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./ui/kit";
 import { parseInstallSource } from "./install-dialog.parse";
 import { useDiscoverSkills, useInstallSkills } from "../hooks/use-skills";
+import { useInstalledAgents } from "../hooks/use-installed-agents";
 import { useScopeActions } from "../lib/scope-store";
 import { useToastActions } from "../lib/toast-store";
 import type { DiscoverResult } from "../lib/types";
@@ -53,6 +53,18 @@ function ErrorNote({ message }: { message: string }) {
  * silently pre-selecting one reads as "already chosen" to the user. */
 function pickDefaultScopeId(scopes: Scope[], defaultScopeId: string): string {
   return scopes.some((s) => s.id === defaultScopeId) ? defaultScopeId : "";
+}
+
+/** Default agent selection for a fresh dialog open: every installed agent.
+ * The user is in charge after this — they can deselect individually or via
+ * "Select all" (which toggles to none). */
+function defaultAgentSelection(
+  installed: InstalledAgents | undefined,
+): Set<AgentId> {
+  if (!installed) return new Set();
+  return new Set(
+    AGENTS.filter((a) => installed[a.id] === true).map((a) => a.id),
+  );
 }
 
 function ScopeSelect({
@@ -181,17 +193,23 @@ export function InstallDialog({
   const [discover, setDiscover] = useState<DiscoverResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scopeId, setScopeId] = useState(() => pickDefaultScopeId(scopes, defaultScopeId));
-  const [agents, setAgents] = useState<Set<AgentId>>(new Set(["claude"]));
+  const [agents, setAgents] = useState<Set<AgentId>>(new Set());
   const [method, setMethod] = useState<InstallMethod>("symlink");
 
   const discoverMut = useDiscoverSkills();
   const installMut = useInstallSkills();
+  const { data: installedAgents, isPending: agentsLoading } =
+    useInstalledAgents();
   const { selectScope } = useScopeActions();
   const { show } = useToastActions();
 
   const parsed = useMemo(() => parseInstallSource(url), [url]);
   const urlInvalid = touched && url.trim().length > 0 && !parsed;
   const canDiscover = !!parsed && !discoverMut.isPending;
+  const visibleAgents = useMemo(
+    () => (installedAgents ? AGENTS.filter((a) => installedAgents[a.id] === true) : []),
+    [installedAgents],
+  );
   const canInstall =
     !!discover &&
     selected.size > 0 &&
@@ -206,7 +224,7 @@ export function InstallDialog({
     setDiscover(null);
     setSelected(new Set());
     setScopeId(pickDefaultScopeId(scopes, defaultScopeId));
-    setAgents(new Set(["claude"]));
+    setAgents(defaultAgentSelection(installedAgents));
     setMethod("symlink");
     discoverMut.reset();
     installMut.reset();
@@ -227,12 +245,16 @@ export function InstallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  function backToInput() {
-    setPhase("input");
-    setDiscover(null);
-    setSelected(new Set());
-    discoverMut.reset();
-  }
+  // After reset(), default-select Claude (or the first installed agent) once
+  // the install-status query has data. Skips whenever the user has already
+  // picked anything, so toggles/clears are not overridden by a refetch.
+  useEffect(() => {
+    if (!open || !installedAgents) return;
+    setAgents((prev) =>
+      prev.size > 0 ? prev : defaultAgentSelection(installedAgents),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, installedAgents]);
 
   async function handleDiscover() {
     setTouched(true);
@@ -278,9 +300,12 @@ export function InstallDialog({
     });
   }
 
-  const allAgentsSelected = agents.size === AGENTS.length;
+  const allAgentsSelected =
+    visibleAgents.length > 0 && agents.size === visibleAgents.length;
   function toggleAllAgents() {
-    setAgents(allAgentsSelected ? new Set() : new Set(AGENTS.map((a) => a.id)));
+    setAgents(
+      allAgentsSelected ? new Set() : new Set(visibleAgents.map((a) => a.id)),
+    );
   }
 
   function toggleSkill(skillPath: string) {
@@ -309,12 +334,6 @@ export function InstallDialog({
       width={560}
       footer={
         <>
-          {phase === "select" && (
-            <Button variant="ghost" onClick={backToInput} className="mr-auto">
-              <ArrowLeft size={15} />
-              Back
-            </Button>
-          )}
           <Button variant="secondary" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
@@ -444,43 +463,57 @@ export function InstallDialog({
             {/* Agents */}
             <Field
               label="Agents to install for"
-              hint="codex, gemini, and cursor share a common folder and are surfaced together."
+              hint={
+                visibleAgents.length === 0
+                  ? undefined
+                  : "Only agents installed on this machine are listed. codex, gemini, and cursor share a common folder."
+              }
             >
               <div className="overflow-hidden rounded-xl border border-border-strong">
-                <button
-                  type="button"
-                  onClick={toggleAllAgents}
-                  className="flex w-full items-center gap-2.5 border-b border-border bg-surface-2 px-3 py-1.5 text-left"
-                >
-                  <CheckTick checked={allAgentsSelected} />
-                  <span className="text-[13px] font-medium text-fg">Select all</span>
-                  <span className="ml-auto text-[12px] text-subtle">
-                    {agents.size} / {AGENTS.length}
-                  </span>
-                </button>
-                <ul>
-                  {AGENTS.map((agent) => {
-                    const checked = agents.has(agent.id);
-                    return (
-                      <li key={agent.id}>
-                        <button
-                          type="button"
-                          onClick={() => toggleAgent(agent.id)}
-                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-100 hover:bg-surface-2"
-                        >
-                          <CheckTick checked={checked} />
-                          <AgentBadge id={agent.id} size={22} />
-                          <span className="text-[13px] font-medium text-fg">
-                            {agent.label}
-                          </span>
-                          <span className="ml-auto font-mono text-[11px] text-subtle">
-                            {agent.dir}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                {visibleAgents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={toggleAllAgents}
+                    className="flex w-full items-center gap-2.5 border-b border-border bg-surface-2 px-3 py-1.5 text-left"
+                  >
+                    <CheckTick checked={allAgentsSelected} />
+                    <span className="text-[13px] font-medium text-fg">Select all</span>
+                    <span className="ml-auto text-[12px] text-subtle">
+                      {agents.size} / {visibleAgents.length}
+                    </span>
+                  </button>
+                )}
+                {visibleAgents.length === 0 ? (
+                  <div className="px-3 py-3 text-[12px] leading-snug text-subtle">
+                    {agentsLoading
+                      ? "Checking which agents are installed…"
+                      : "No supported agents are installed. Install Claude, Codex, Cursor, Gemini, GitHub Copilot, or Windsurf and try again."}
+                  </div>
+                ) : (
+                  <ul>
+                    {visibleAgents.map((agent) => {
+                      const checked = agents.has(agent.id);
+                      return (
+                        <li key={agent.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleAgent(agent.id)}
+                            className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-100 hover:bg-surface-2"
+                          >
+                            <CheckTick checked={checked} />
+                            <AgentBadge id={agent.id} size={22} />
+                            <span className="text-[13px] font-medium text-fg">
+                              {agent.label}
+                            </span>
+                            <span className="ml-auto font-mono text-[11px] text-subtle">
+                              {agent.dir}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             </Field>
 

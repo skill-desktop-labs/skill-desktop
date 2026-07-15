@@ -368,6 +368,14 @@ fn detect_installed(
     );
     map.insert("gemini".to_string(), home.join(".gemini").exists());
     map.insert("cursor".to_string(), home.join(".cursor").exists());
+    map.insert(
+        "github-copilot".to_string(),
+        home.join(".copilot").exists(),
+    );
+    map.insert(
+        "windsurf".to_string(),
+        home.join(".codeium/windsurf").exists(),
+    );
     map
 }
 
@@ -405,7 +413,7 @@ fn detect_installed_agents(app: tauri::AppHandle) -> HashMap<String, bool> {
 /// Universal agents share the canonical `.agents/skills` directory instead of a
 /// per-agent one; a skill found there is attributed to whichever of these is
 /// installed. Mirrors `isUniversalAgent` in the skills CLI.
-const UNIVERSAL_AGENTS: [&str; 3] = ["codex", "gemini", "cursor"];
+const UNIVERSAL_AGENTS: [&str; 4] = ["codex", "gemini", "cursor", "github-copilot"];
 
 /// One installed skill, serialized to match the TS `Skill` interface
 /// (`src/lib/types.ts`).
@@ -555,6 +563,8 @@ fn agent_rank(agent: &str) -> u8 {
         "codex" => 1,
         "gemini" => 2,
         "cursor" => 3,
+        "github-copilot" => 4,
+        "windsurf" => 5,
         _ => u8::MAX,
     }
 }
@@ -614,31 +624,42 @@ fn build_skill(name: String, description: String, method: String, agents: Vec<St
 
 /// Build the scan targets for a scope: each agent's own `<home>/skills` dir plus
 /// the shared canonical `<base>/.agents/skills` (attributed to the installed
-/// universal agents). `claude_home`/`codex_home` are the resolved agent config
-/// homes (honouring env overrides in the global scope); `base` roots the rest.
+/// universal agents). `claude_home`/`codex_home` honour env overrides in the
+/// global scope; `windsurf_home` resolves to `<base>/.windsurf` in project scope
+/// and `~/.codeium/windsurf` in global scope (mirrors the Vercel CLI). The
+/// canonical `.agents/skills` dir stays LAST so `delete_skill` can unlink
+/// per-agent symlinks before removing it.
 fn build_targets(
-    base: &Path,
-    claude_home: &Path,
-    codex_home: &Path,
+    roots: &InstallRoots,
     installed_universal: Vec<String>,
 ) -> Vec<(Vec<String>, PathBuf)> {
     vec![
-        (vec!["claude".to_string()], claude_home.join("skills")),
-        (vec!["codex".to_string()], codex_home.join("skills")),
-        (vec!["gemini".to_string()], base.join(".gemini/skills")),
-        (vec!["cursor".to_string()], base.join(".cursor/skills")),
-        (installed_universal, base.join(".agents/skills")),
+        (vec!["claude".to_string()], roots.claude_home.join("skills")),
+        (vec!["codex".to_string()], roots.codex_home.join("skills")),
+        (vec!["gemini".to_string()], roots.base.join(".gemini/skills")),
+        (vec!["cursor".to_string()], roots.base.join(".cursor/skills")),
+        (vec!["github-copilot".to_string()], roots.base.join(".copilot/skills")),
+        (vec!["windsurf".to_string()], roots.windsurf_home.join("skills")),
+        (installed_universal, roots.base.join(".agents/skills")),
     ]
 }
 
 /// Where an install writes, resolved per scope — the write-side mirror of
 /// `resolve_targets`. Project scope roots everything at the project path;
-/// global scope roots at the user's home and honours `CLAUDE_CONFIG_DIR` for Claude.
+/// global scope roots at the user's home and honours `CLAUDE_CONFIG_DIR` /
+/// `CODEX_HOME` for Claude / Codex respectively. Windsurf always uses
+/// `<base>/.windsurf` in project and `~/.codeium/windsurf` in global (per Vercel CLI).
 struct InstallRoots {
-    /// Roots the canonical `.agents/skills` (+ gemini/cursor) dirs.
+    /// Roots the canonical `.agents/skills` (+ gemini/cursor/copilot) dirs.
     base: PathBuf,
     /// Roots Claude's `skills` dir (`CLAUDE_CONFIG_DIR` override in global scope).
     claude_home: PathBuf,
+    /// Roots Codex's scan dir (`CODEX_HOME` override in global scope); install
+    /// writes to the shared canonical `.agents/skills` like other universal agents.
+    codex_home: PathBuf,
+    /// Roots Windsurf's `skills` dir. Project: `<base>/.windsurf`; global:
+    /// `~/.codeium/windsurf` (Vercel CLI's globalSkillsDir).
+    windsurf_home: PathBuf,
 }
 
 /// Pure core of `resolve_install_roots` (no `AppHandle`), for testability.
@@ -647,18 +668,23 @@ fn install_roots_for(
     scope_path: Option<&str>,
     home: &Path,
     claude_env: Option<&str>,
+    codex_env: Option<&str>,
 ) -> InstallRoots {
     match scope_path.map(str::trim).filter(|s| !s.is_empty()) {
         Some(root) => {
             let base = PathBuf::from(root);
             InstallRoots {
                 claude_home: base.join(".claude"),
+                codex_home: base.join(".codex"),
+                windsurf_home: base.join(".windsurf"),
                 base,
             }
         }
         None => InstallRoots {
             base: home.to_path_buf(),
             claude_home: override_or(home, claude_env, ".claude"),
+            codex_home: override_or(home, codex_env, ".codex"),
+            windsurf_home: home.join(".codeium/windsurf"),
         },
     }
 }
@@ -695,22 +721,13 @@ fn resolve_targets(
         .map(|a| a.to_string())
         .collect();
 
-    match scope_path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(root) => {
-            let base = Path::new(root);
-            build_targets(
-                base,
-                &base.join(".claude"),
-                &base.join(".codex"),
-                installed_universal,
-            )
-        }
-        None => {
-            let claude_home = override_or(&home, claude_env.as_deref(), ".claude");
-            let codex_home = override_or(&home, codex_env.as_deref(), ".codex");
-            build_targets(&home, &claude_home, &codex_home, installed_universal)
-        }
-    }
+    let roots = install_roots_for(
+        scope_path.as_deref(),
+        &home,
+        claude_env.as_deref(),
+        codex_env.as_deref(),
+    );
+    build_targets(&roots, installed_universal)
 }
 
 /// Remove every entry across `targets` whose SKILL.md front-matter `name` equals
@@ -1032,34 +1049,37 @@ fn make_relative(from_dir: &Path, to: &Path) -> PathBuf {
 }
 
 /// The base skills dir for an agent within a scope. Universal agents
-/// (codex/gemini/cursor) share the canonical `.agents/skills`; `claude` uses
-/// `claude_home` (honouring `CLAUDE_CONFIG_DIR` in the global scope).
-fn agent_base_dir(base: &Path, claude_home: &Path, agent: &str) -> PathBuf {
+/// (codex/gemini/cursor/github-copilot) share the canonical `.agents/skills`;
+/// `claude` uses `claude_home`; `windsurf` uses `windsurf_home` (which resolves
+/// per-scope to match Vercel CLI); other agents fall back to `.<id>/skills`.
+fn agent_base_dir(roots: &InstallRoots, agent: &str) -> PathBuf {
     if UNIVERSAL_AGENTS.contains(&agent) {
-        base.join(".agents/skills")
+        roots.base.join(".agents/skills")
     } else if agent == "claude" {
-        claude_home.join("skills")
+        roots.claude_home.join("skills")
+    } else if agent == "windsurf" {
+        roots.windsurf_home.join("skills")
     } else {
-        base.join(format!(".{agent}/skills"))
+        roots.base.join(format!(".{agent}/skills"))
     }
 }
 
-/// Install one skill folder into a scope for the given agents. `claude_home`
-/// roots claude's skills dir (project → base/.claude, global → CLAUDE_CONFIG_DIR).
+/// Install one skill folder into a scope for the given agents. Universal agents
+/// land in the canonical `.agents/skills`; `claude` and `windsurf` get their
+/// own per-scope dirs (`claude_home` / `windsurf_home`).
 fn place_skill(
-    base: &Path,
-    claude_home: &Path,
+    roots: &InstallRoots,
     src_skill_dir: &Path,
     name: &str,
     agents: &[String],
     method: &str,
 ) -> Result<(), String> {
     let dir_name = sanitize_name(name);
-    let canonical = base.join(".agents/skills").join(&dir_name);
+    let canonical = roots.base.join(".agents/skills").join(&dir_name);
 
     if method == "copy" {
         for agent in agents {
-            let dest = agent_base_dir(base, claude_home, agent).join(&dir_name);
+            let dest = agent_base_dir(roots, agent).join(&dir_name);
             let _ = std::fs::remove_dir_all(&dest);
             copy_dir_filtered(src_skill_dir, &dest).map_err(|e| e.to_string())?;
         }
@@ -1070,7 +1090,7 @@ fn place_skill(
     let _ = std::fs::remove_dir_all(&canonical);
     copy_dir_filtered(src_skill_dir, &canonical).map_err(|e| e.to_string())?;
     for agent in agents {
-        let agent_dir = agent_base_dir(base, claude_home, agent).join(&dir_name);
+        let agent_dir = agent_base_dir(roots, agent).join(&dir_name);
         if agent_dir == canonical {
             continue; // universal agents already point at canonical
         }
@@ -1097,12 +1117,13 @@ fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 fn resolve_targets_for_test(base: &Path, universal: &[String]) -> Vec<(Vec<String>, PathBuf)> {
-    build_targets(
-        base,
-        &base.join(".claude"),
-        &base.join(".codex"),
-        universal.to_vec(),
-    )
+    let roots = InstallRoots {
+        base: base.to_path_buf(),
+        claude_home: base.join(".claude"),
+        codex_home: base.join(".codex"),
+        windsurf_home: base.join(".windsurf"),
+    };
+    build_targets(&roots, universal.to_vec())
 }
 
 /// Place selected skills from a validated clone dir into a scope. Returns
@@ -1126,7 +1147,7 @@ fn install_selected(
         let (name, description) =
             parse_frontmatter(&content).ok_or("Failed to parse SKILL.md")?;
 
-        place_skill(&roots.base, &roots.claude_home, skill_dir, &name, agents, method)?;
+        place_skill(roots, skill_dir, &name, agents, method)?;
 
         out.push(build_skill(name, description, method.to_string(), agents.to_vec()));
     }
@@ -1158,14 +1179,20 @@ fn resolve_temp_clone(temp_dir: &str) -> Result<PathBuf, String> {
 }
 
 /// Resolve the install roots for a scope using the running app's home dir and
-/// `CLAUDE_CONFIG_DIR`. Absent/empty `scope_path` → global scope.
+/// `CLAUDE_CONFIG_DIR` / `CODEX_HOME`. Absent/empty `scope_path` → global scope.
 fn resolve_install_roots(app: &tauri::AppHandle, scope_path: Option<String>) -> InstallRoots {
     let home = app
         .path()
         .home_dir()
         .unwrap_or_else(|_| PathBuf::from(std::env::var("HOME").unwrap_or_default()));
     let claude_env = std::env::var("CLAUDE_CONFIG_DIR").ok();
-    install_roots_for(scope_path.as_deref(), &home, claude_env.as_deref())
+    let codex_env = std::env::var("CODEX_HOME").ok();
+    install_roots_for(
+        scope_path.as_deref(),
+        &home,
+        claude_env.as_deref(),
+        codex_env.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -1587,7 +1614,7 @@ mod skill_tests {
     #[cfg(unix)]
     #[test]
     fn place_symlink_roundtrips_with_scan() {
-        use super::{place_skill, scan_skills, resolve_targets_for_test};
+        use super::{place_skill, scan_skills, resolve_targets_for_test, InstallRoots};
         let base = tempdir().unwrap();
         // a source skill dir
         let src = tempdir().unwrap();
@@ -1595,7 +1622,13 @@ mod skill_tests {
         fs::create_dir_all(&sdir).unwrap();
         fs::write(sdir.join("SKILL.md"), "---\nname: pdf\ndescription: PDF\n---\nx\n").unwrap();
 
-        place_skill(base.path(), &base.path().join(".claude"), &sdir, "pdf", &["claude".into()], "symlink").unwrap();
+        let roots = InstallRoots {
+            base: base.path().to_path_buf(),
+            claude_home: base.path().join(".claude"),
+            codex_home: base.path().join(".codex"),
+            windsurf_home: base.path().join(".windsurf"),
+        };
+        place_skill(&roots, &sdir, "pdf", &["claude".into()], "symlink").unwrap();
 
         // canonical real dir + claude symlink exist
         assert!(base.path().join(".agents/skills/pdf/SKILL.md").exists());
@@ -1612,7 +1645,7 @@ mod skill_tests {
 
     #[test]
     fn place_copy_writes_into_agent_dir() {
-        use super::place_skill;
+        use super::{place_skill, InstallRoots};
         let base = tempdir().unwrap();
         let src = tempdir().unwrap();
         let sdir = src.path().join("pdf");
@@ -1621,7 +1654,13 @@ mod skill_tests {
         fs::create_dir_all(sdir.join(".git")).unwrap();
         fs::write(sdir.join(".git/x"), "should not copy").unwrap();
 
-        place_skill(base.path(), &base.path().join(".claude"), &sdir, "pdf", &["claude".into()], "copy").unwrap();
+        let roots = InstallRoots {
+            base: base.path().to_path_buf(),
+            claude_home: base.path().join(".claude"),
+            codex_home: base.path().join(".codex"),
+            windsurf_home: base.path().join(".windsurf"),
+        };
+        place_skill(&roots, &sdir, "pdf", &["claude".into()], "copy").unwrap();
         assert!(base.path().join(".claude/skills/pdf/SKILL.md").exists());
         assert!(!base.path().join(".claude/skills/pdf/.git").exists()); // excluded
     }
@@ -1656,6 +1695,8 @@ mod skill_tests {
         let roots = InstallRoots {
             base: base.path().to_path_buf(),
             claude_home: base.path().join(".claude"),
+            codex_home: base.path().join(".codex"),
+            windsurf_home: base.path().join(".windsurf"),
         };
         assert!(install_selected(&roots, clone.path(), &["/etc/passwd".into()], &["claude".into()], "copy").is_err());
         assert!(install_selected(&roots, clone.path(), &["../x/SKILL.md".into()], &["claude".into()], "copy").is_err());
@@ -1674,6 +1715,8 @@ mod skill_tests {
         let roots = InstallRoots {
             base: home.path().to_path_buf(),
             claude_home: claude.path().to_path_buf(), // proof that the override is applied
+            codex_home: home.path().join(".codex"),
+            windsurf_home: home.path().join(".codeium/windsurf"),
         };
         let installed = install_selected(
             &roots,
@@ -1701,18 +1744,26 @@ mod skill_tests {
         let home = Path::new("/home/u");
 
         // Project scope: everything under the project path
-        let p = install_roots_for(Some("/work/proj"), home, None);
+        let p = install_roots_for(Some("/work/proj"), home, None, None);
         assert_eq!(p.base, Path::new("/work/proj"));
         assert_eq!(p.claude_home, Path::new("/work/proj/.claude"));
+        assert_eq!(p.codex_home, Path::new("/work/proj/.codex"));
+        assert_eq!(p.windsurf_home, Path::new("/work/proj/.windsurf"));
 
-        // Global scope (no override): under home
-        let g = install_roots_for(None, home, None);
+        // Global scope (no override): under home, Windsurf under .codeium/windsurf
+        let g = install_roots_for(None, home, None, None);
         assert_eq!(g.base, home);
         assert_eq!(g.claude_home, Path::new("/home/u/.claude"));
+        assert_eq!(g.codex_home, Path::new("/home/u/.codex"));
+        assert_eq!(g.windsurf_home, Path::new("/home/u/.codeium/windsurf"));
 
         // Global scope: CLAUDE_CONFIG_DIR applied; blank scope_path == global
-        let g2 = install_roots_for(Some("  "), home, Some("/custom/claude"));
+        let g2 = install_roots_for(Some("  "), home, Some("/custom/claude"), None);
         assert_eq!(g2.base, home);
         assert_eq!(g2.claude_home, Path::new("/custom/claude"));
+
+        // Global scope: CODEX_HOME applied
+        let g3 = install_roots_for(None, home, None, Some("/custom/codex"));
+        assert_eq!(g3.codex_home, Path::new("/custom/codex"));
     }
 }

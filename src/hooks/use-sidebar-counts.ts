@@ -9,6 +9,8 @@ const EMPTY_AGENT_COUNTS: Record<AgentId, number> = {
   codex: 0,
   gemini: 0,
   cursor: 0,
+  "github-copilot": 0,
+  windsurf: 0,
 };
 
 /** Counts for the sidebar: skills per scope + per-agent counts in the active scope. Does not depend on query/agentFilter. */
