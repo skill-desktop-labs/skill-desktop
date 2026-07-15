@@ -76,9 +76,11 @@ jobs:
             exit 1
           fi
           APP_NAME=$(basename "$APP_PATH")
-          APP_NAME_ENC=$(printf '%s' "$APP_NAME" | sed 's/ /%20/g')
+          # GitHub Release asset names replace spaces with dots; mirror that
+          # here so the URL in latest.json matches the actual asset name.
+          APP_NAME_URL=$(printf '%s' "$APP_NAME" | sed 's/ /./g')
           SIG=$(cat "$SIG_PATH")
-          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APP_NAME_ENC}"
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APP_NAME_URL}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           jq -n \
             --arg version "$VERSION" \
