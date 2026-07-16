@@ -1,6 +1,6 @@
 [package]
 name = "skill-desktop"
-version = "0.1.0"
+version = "0.1.2"
 description = "A desktop app to install and manage agent skills across local coding agents"
 authors = ["hojinlee"]
 license = "MIT"
