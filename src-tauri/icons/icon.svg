@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Deep blue background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2f80f0"/>
+      <stop offset="52%" stop-color="#1668dc"/>
+      <stop offset="100%" stop-color="#0a3278"/>
+    </linearGradient>
+    <!-- Soft top-left glow -->
+    <radialGradient id="glow" cx="0.28" cy="0.18" r="0.85">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Card tones -->
+    <linearGradient id="cardBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a4faf"/>
+      <stop offset="100%" stop-color="#0b2e7a"/>
+    </linearGradient>
+    <linearGradient id="cardMid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3f8ae8"/>
+      <stop offset="100%" stop-color="#1f5cc4"/>
+    </linearGradient>
+    <linearGradient id="cardFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#eaf1fc"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5aa0ff"/>
+      <stop offset="100%" stop-color="#0f50c4"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dy="14"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.38"/></feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Squircle background -->
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#glow)"/>
+  <rect x="3" y="3" width="1018" height="1018" rx="225" ry="225"
+        fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="3"/>
+
+  <!-- Stacked cards: each rotated around its own center, then offset -->
+  <g filter="url(#shadow)">
+    <!-- Back card -->
+    <g transform="translate(-56 56) rotate(-10 512 480)">
+      <rect x="232" y="292" width="560" height="376" rx="56" ry="56"
+            fill="url(#cardBack)" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+    </g>
+    <!-- Middle card -->
+    <g transform="translate(-28 28) rotate(-5 512 480)">
+      <rect x="232" y="292" width="560" height="376" rx="56" ry="56"
+            fill="url(#cardMid)" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1.5"/>
+    </g>
+    <!-- Front card -->
+    <g>
+      <rect x="232" y="292" width="560" height="376" rx="56" ry="56"
+            fill="url(#cardFront)"/>
+    </g>
+  </g>
+
+  <!-- Front card content -->
+  <!-- Spark (4-point star) -->
+  <g transform="translate(316 388)">
+    <path d="M 0,-52 Q 0,0 52,0 Q 0,0 0,52 Q 0,0 -52,0 Q 0,0 0,-52 Z"
+          fill="url(#spark)"/>
+  </g>
+  <!-- Title line next to spark -->
+  <rect x="392" y="372" width="180" height="24" rx="12" fill="#1b1b1f" opacity="0.88"/>
+  <!-- Description lines -->
+  <rect x="288" y="452" width="448" height="14" rx="7" fill="#1668dc" opacity="0.32"/>
+  <rect x="288" y="482" width="380" height="14" rx="7" fill="#1668dc" opacity="0.24"/>
+  <rect x="288" y="512" width="312" height="14" rx="7" fill="#1668dc" opacity="0.18"/>
+</svg>
